@@ -15,7 +15,7 @@ Run from the project root:
 
 import pytest
 
-from agent import run_agent, _normalize_size
+from agent import run_agent, _normalize_size, _expand_size
 from utils.data_loader import get_example_wardrobe
 
 
@@ -37,6 +37,21 @@ def test_normalize_size_passthrough_and_empty():
     assert _normalize_size("") is None
 
 
+def test_expand_size_adjacent_order():
+    # XXS should try XS before S — closest first.
+    assert _expand_size("XXS") == ["XS", "S"]
+    assert _expand_size("M") == ["S", "L"]
+    assert _expand_size("XL") == ["L", "XXL"]
+
+
+def test_expand_size_unknown_returns_empty():
+    # Numeric and unknown sizes have no adjacency map — return empty so the
+    # retry loop falls through to dropping the size entirely.
+    assert _expand_size("8") == []
+    assert _expand_size("W30") == []
+    assert _expand_size("One Size") == []
+
+
 # ── planning loop: no-results branch ─────────────────────────────────────────
 
 @pytest.mark.llm
@@ -50,6 +65,17 @@ def test_run_agent_no_results_stops_early():
     assert session["selected_item"] is None
     assert session["outfit_suggestion"] is None
     assert session["fit_card"] is None
+
+
+@pytest.mark.llm
+def test_run_agent_retry_sets_retry_note():
+    # An impossible size (XXS) with a valid description should trigger a retry
+    # and set session["retry_note"] explaining what was loosened.
+    session = run_agent("vintage graphic tee size XXS", get_example_wardrobe())
+    assert session["error"] is None
+    assert session["retry_note"] is not None
+    assert "XXS" in session["retry_note"]
+    assert session["selected_item"] is not None
 
 
 @pytest.mark.llm
