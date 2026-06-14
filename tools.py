@@ -124,30 +124,122 @@ def search_listings(
 
 # ── Tool 2: suggest_outfit ────────────────────────────────────────────────────
 
-def suggest_outfit(new_item: dict, wardrobe: dict) -> str:
+def compare_price(item: dict, all_listings: list[dict] | None = None) -> dict:
+    """
+    Compare an item's price against other listings of the same category
+    in the dataset and return a price assessment with reasoning.
+
+    Args:
+        item:         A listing dict (the item being considered).
+        all_listings: Pre-loaded listings to compare against. If None,
+                      load_listings() is called. Pass a cached list to avoid
+                      repeated file reads.
+
+    Returns:
+        A dict with:
+            verdict (str):          "great deal", "fair price", or "above average"
+            item_price (float):     the item's price
+            median_price (float):   median price of comparable items
+            comparable_count (int): how many items were compared
+            reasoning (str):        one sentence explaining the verdict
+    """
+    if all_listings is None:
+        all_listings = load_listings()
+
+    category = item.get("category", "")
+    item_price = item.get("price", 0)
+    item_id = item.get("id")
+
+    comparables = [
+        l for l in all_listings
+        if l.get("category") == category and l.get("id") != item_id
+    ]
+
+    if not comparables:
+        return {
+            "verdict": "no comparables",
+            "item_price": item_price,
+            "median_price": None,
+            "comparable_count": 0,
+            "reasoning": f"No other {category} items in the dataset to compare against.",
+        }
+
+    prices = sorted(l["price"] for l in comparables)
+    median = prices[len(prices) // 2]
+    pct_diff = (item_price - median) / median * 100
+
+    if pct_diff <= -20:
+        verdict = "great deal"
+        reasoning = (
+            f"At ${item_price:.0f}, this is ${median - item_price:.0f} below the "
+            f"median of ${median:.0f} for {category} in this dataset "
+            f"({len(comparables)} items compared) — a strong value."
+        )
+    elif pct_diff <= 15:
+        verdict = "fair price"
+        reasoning = (
+            f"At ${item_price:.0f}, this is close to the median of ${median:.0f} "
+            f"for {category} in this dataset ({len(comparables)} items compared)."
+        )
+    else:
+        verdict = "above average"
+        reasoning = (
+            f"At ${item_price:.0f}, this is ${item_price - median:.0f} above the "
+            f"median of ${median:.0f} for {category} in this dataset "
+            f"({len(comparables)} items compared) — you may find better value."
+        )
+
+    return {
+        "verdict": verdict,
+        "item_price": item_price,
+        "median_price": median,
+        "comparable_count": len(comparables),
+        "reasoning": reasoning,
+    }
+
+
+def get_trend_context(style_tags: list[str]) -> str:
+    """
+    Ask the LLM what's currently trending in fashion for the given style tags.
+    Returns a 2–3 sentence summary used to inform outfit suggestions.
+
+    Args:
+        style_tags: A list of style descriptors from a listing (e.g. ["vintage", "grunge"]).
+
+    Returns:
+        A non-empty string describing current trends relevant to those styles.
+    """
+    client = _get_groq_client()
+    tags_str = ", ".join(style_tags) if style_tags else "general fashion"
+    prompt = (
+        f"In 2-3 sentences, describe what's currently trending in fashion "
+        f"related to these styles: {tags_str}. Be specific about silhouettes, "
+        f"color palettes, or styling approaches that are having a moment right now. "
+        f"Keep it factual and actionable — no generic advice."
+    )
+    response = client.chat.completions.create(
+        model=_MODEL,
+        messages=[{"role": "user", "content": prompt}],
+        temperature=0.3,
+    )
+    return response.choices[0].message.content.strip()
+
+
+def suggest_outfit(new_item: dict, wardrobe: dict, style_context: str | None = None, trend_context: str | None = None) -> str:
     """
     Given a thrifted item and the user's wardrobe, suggest 1–2 complete outfits.
 
     Args:
-        new_item: A listing dict (the item the user is considering buying).
-        wardrobe: A wardrobe dict with an 'items' key containing a list of
-                  wardrobe item dicts. May be empty — handle this gracefully.
+        new_item:      A listing dict (the item the user is considering buying).
+        wardrobe:      A wardrobe dict with an 'items' key. May be empty.
+        style_context: Optional string describing the user's past style preferences,
+                       loaded from the style profile. Injected into the prompt when set.
+        trend_context: Optional string from get_trend_context() describing current
+                       trends. Injected into the prompt to influence suggestions.
 
     Returns:
-        A non-empty string with outfit suggestions.
-        If the wardrobe is empty, offer general styling advice for the item
-        rather than raising an exception or returning an empty string.
-
-    TODO:
-        1. Check whether wardrobe['items'] is empty.
-        2. If empty: call the LLM with a prompt for general styling ideas
-           (what kinds of items pair well, what vibe it suits, etc.).
-        3. If not empty: format the wardrobe items into a prompt and ask
-           the LLM to suggest specific outfit combinations using the new item
-           and named pieces from the wardrobe.
-        4. Return the LLM's response as a string.
-
-    Before writing code, fill in the Tool 2 section of planning.md.
+        A non-empty string with outfit suggestions. If the wardrobe is empty,
+        returns general styling advice instead. Never raises.
     """
     client = _get_groq_client()
 
@@ -161,6 +253,13 @@ def suggest_outfit(new_item: dict, wardrobe: dict) -> str:
 
     items = wardrobe.get("items", []) if wardrobe else []
 
+    # Build optional context lines appended to both prompt variants.
+    context_lines = ""
+    if style_context:
+        context_lines += f"\nUser's past style preferences: {style_context}"
+    if trend_context:
+        context_lines += f"\nCurrent trend context: {trend_context}"
+
     if not items:
         # Empty-wardrobe fallback: general styling advice, no named pieces.
         prompt = (
@@ -171,6 +270,7 @@ def suggest_outfit(new_item: dict, wardrobe: dict) -> str:
             f"vibe or occasions it suits, and one or two outfit directions they "
             f"could build around it. Keep it to a short, friendly paragraph in an "
             f"elevated-casual voice. Do not invent specific items they own."
+            f"{context_lines}"
         )
     else:
         # Format the wardrobe into a readable list for the prompt.
@@ -195,6 +295,7 @@ def suggest_outfit(new_item: dict, wardrobe: dict) -> str:
             f"items from their closet. Refer to the wardrobe pieces by name. Keep "
             f"it concise and in an elevated-casual voice. Only use pieces from the "
             f"list above — don't invent items they don't own."
+            f"{context_lines}"
         )
 
     response = client.chat.completions.create(

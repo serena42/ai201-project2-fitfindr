@@ -62,12 +62,19 @@ def handle_query(user_query: str, wardrobe_choice: str) -> tuple[str, str, str]:
 
     # 5. Format the selected listing into a readable block for the first panel.
     item = session["selected_item"]
+    pc = session.get("price_comparison") or {}
+    price_line = ""
+    if pc.get("verdict") and pc["verdict"] != "no comparables":
+        verdict_emoji = {"great deal": "✅", "fair price": "➡️", "above average": "⚠️"}.get(pc["verdict"], "")
+        price_line = f"\nPrice check {verdict_emoji} {pc['verdict'].upper()}: {pc['reasoning']}"
+
     listing_text = (
         f"{item['title']}\n"
         f"${item['price']:.0f} · {item['platform']}\n"
         f"Size {item['size']} · {item['condition']}\n"
-        f"Brand: {item.get('brand', 'unknown')}\n\n"
+        f"Brand: {item.get('brand', 'unknown')}\n"
         f"{item['description']}"
+        f"{price_line}"
     )
 
     return listing_text, session["outfit_suggestion"], session["fit_card"]

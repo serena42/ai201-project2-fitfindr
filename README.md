@@ -97,6 +97,30 @@ python -m pytest tests/ -m "not llm" # offline tests only
 
 ---
 
+### Stretch Tool: `compare_price`
+
+**File:** `tools.py`
+
+**Purpose:** Compares a listing's price against all other items of the same category in the dataset and returns a price assessment with reasoning. Runs entirely offline.
+
+**Inputs:**
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `item` | `dict` | The listing dict being assessed. |
+| `all_listings` | `list[dict] \| None` | Pre-loaded listings to compare against. Loads from file if `None`. |
+
+**Output:** `dict` with keys: `verdict` ("great deal" / "fair price" / "above average" / "no comparables"), `item_price`, `median_price`, `comparable_count`, `reasoning` (one sentence explaining the verdict).
+
+**How comparisons are made:** All listings with the same `category` field are collected (excluding the item itself). Their prices are sorted and the median is computed. Items more than 20% below the median are "great deal"; within 15% above are "fair price"; beyond that are "above average". The reasoning sentence includes the median, the count of comparable items, and the dollar difference.
+
+The result is shown in the listing panel of the UI as a price check line, e.g.:
+```
+Price check ✅ GREAT DEAL: At $19, this is $2 below the median of $21 for tops in this dataset (14 items compared) — a strong value.
+```
+
+---
+
 ## Planning Loop
 
 The planning loop in `run_agent()` (`agent.py`) is sequential and branches on whether `search_listings` finds anything. Here's exactly what it does:

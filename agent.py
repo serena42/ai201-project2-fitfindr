@@ -24,9 +24,11 @@ from tools import (
     search_listings,
     suggest_outfit,
     create_fit_card,
+    compare_price,
     _get_groq_client,
     _MODEL,
 )
+from utils.data_loader import load_listings as _load_listings
 
 
 # ── query parsing ─────────────────────────────────────────────────────────────
@@ -125,6 +127,7 @@ def _new_session(query: str, wardrobe: dict) -> dict:
         "wardrobe": wardrobe,        # user's wardrobe dict
         "outfit_suggestion": None,   # string returned by suggest_outfit
         "fit_card": None,            # string returned by create_fit_card
+        "price_comparison": None,    # dict returned by compare_price
         "error": None,               # set if the interaction ended early
     }
 
@@ -201,6 +204,11 @@ def run_agent(query: str, wardrobe: dict) -> dict:
 
     # Step 4: select the top (most relevant) result to build around.
     session["selected_item"] = session["search_results"][0]
+
+    # Compare the selected item's price against the full dataset (offline).
+    session["price_comparison"] = compare_price(
+        session["selected_item"], all_listings=_load_listings()
+    )
 
     # Step 5: suggest an outfit pairing the selected item with the wardrobe.
     session["outfit_suggestion"] = suggest_outfit(
