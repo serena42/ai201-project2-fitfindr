@@ -221,10 +221,9 @@ def get_trend_context(style_tags: list[str]) -> str:
     client = _get_groq_client()
     tags_str = ", ".join(style_tags) if style_tags else "general fashion"
     prompt = (
-        f"In 2-3 sentences, describe what's currently trending in fashion "
-        f"related to these styles: {tags_str}. Be specific about silhouettes, "
-        f"color palettes, or styling approaches that are having a moment right now. "
-        f"Keep it factual and actionable — no generic advice."
+        f"In one sentence, name the single most relevant current fashion trend "
+        f"for these styles: {tags_str}. Be specific — name a silhouette, "
+        f"color palette, or styling approach. No filler, no generic advice."
     )
     response = client.chat.completions.create(
         model=_MODEL,
@@ -272,13 +271,10 @@ def suggest_outfit(new_item: dict, wardrobe: dict, style_context: str | None = N
     if not items:
         # Empty-wardrobe fallback: general styling advice, no named pieces.
         prompt = (
-            f"A thrifter is considering buying this secondhand piece:\n"
-            f"{item_desc}\n\n"
-            f"They haven't told us what's in their closet. Give general styling "
-            f"advice for this piece: what kinds of items pair well with it, what "
-            f"vibe or occasions it suits, and one or two outfit directions they "
-            f"could build around it. Keep it to a short, friendly paragraph in an "
-            f"elevated-casual voice. Do not invent specific items they own."
+            f"Styling advice for this secondhand piece: {item_desc}\n\n"
+            f"Give 1-2 brief outfit directions — what to pair it with and what "
+            f"vibe it suits. No item description recap, no filler. Elevated-casual "
+            f"voice, 2-3 sentences max."
             f"{context_lines}"
         )
     else:
@@ -297,13 +293,12 @@ def suggest_outfit(new_item: dict, wardrobe: dict, style_context: str | None = N
         wardrobe_text = "\n".join(wardrobe_lines)
 
         prompt = (
-            f"A thrifter is considering buying this secondhand piece:\n"
-            f"{item_desc}\n\n"
-            f"Here is what's already in their closet:\n{wardrobe_text}\n\n"
-            f"Suggest 1-2 complete outfits that pair the new piece with specific "
-            f"items from their closet. Refer to the wardrobe pieces by name. Keep "
-            f"it concise and in an elevated-casual voice. Only use pieces from the "
-            f"list above — don't invent items they don't own."
+            f"New piece: {item_desc}\n\n"
+            f"Their closet:\n{wardrobe_text}\n\n"
+            f"Suggest 1-2 outfits pairing the new piece with named items from "
+            f"the closet. No recap of the item, no filler. Just the outfit combos "
+            f"in an elevated-casual voice, 3-4 sentences max. Only use pieces "
+            f"from the list above."
             f"{context_lines}"
         )
 
