@@ -68,6 +68,10 @@ def handle_query(user_query: str, wardrobe_choice: str) -> tuple[str, str, str]:
         verdict_emoji = {"great deal": "✅", "fair price": "➡️", "above average": "⚠️"}.get(pc["verdict"], "")
         price_line = f"\nPrice check {verdict_emoji} {pc['verdict'].upper()}: {pc['reasoning']}"
 
+    retry_line = ""
+    if session.get("retry_note"):
+        retry_line = f"\nNote: {session['retry_note']}"
+
     listing_text = (
         f"{item['title']}\n"
         f"${item['price']:.0f} · {item['platform']}\n"
@@ -75,6 +79,7 @@ def handle_query(user_query: str, wardrobe_choice: str) -> tuple[str, str, str]:
         f"Brand: {item.get('brand', 'unknown')}\n"
         f"{item['description']}"
         f"{price_line}"
+        f"{retry_line}"
     )
 
     return listing_text, session["outfit_suggestion"], session["fit_card"]

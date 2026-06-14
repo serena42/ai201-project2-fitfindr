@@ -55,6 +55,25 @@ def _normalize_size(size: str | None) -> str | None:
     return _SIZE_WORDS.get(size.strip().lower(), size.strip())
 
 
+# Adjacent sizes to try when the exact size returns no results, ordered by
+# closeness. Only letter sizes are expanded — numeric sizes (shoe/waist) are
+# left to the caller to decide whether to drop entirely.
+_ADJACENT_SIZES: dict[str, list[str]] = {
+    "XXS": ["XS", "S"],
+    "XS":  ["S", "XXS"],
+    "S":   ["XS", "M"],
+    "M":   ["S", "L"],
+    "L":   ["M", "XL"],
+    "XL":  ["L", "XXL"],
+    "XXL": ["XL", "L"],
+}
+
+
+def _expand_size(size: str) -> list[str]:
+    """Return adjacent sizes to try when the exact size yields no results."""
+    return _ADJACENT_SIZES.get(size.upper(), [])
+
+
 def _parse_query(query: str) -> dict:
     """
     Use the LLM to extract search parameters from a free-text query.
@@ -128,6 +147,7 @@ def _new_session(query: str, wardrobe: dict) -> dict:
         "outfit_suggestion": None,   # string returned by suggest_outfit
         "fit_card": None,            # string returned by create_fit_card
         "price_comparison": None,    # dict returned by compare_price
+        "retry_note": None,          # set when search was retried with loosened params
         "error": None,               # set if the interaction ended early
     }
 
@@ -193,12 +213,49 @@ def run_agent(query: str, wardrobe: dict) -> dict:
         max_price=parsed["max_price"],
     )
 
-    # Branch on the result. With no matching item there is nothing to style or
-    # caption, so set an error and return early — do NOT call the downstream tools.
+    # If nothing matched, retry with progressively loosened size constraints.
+    if not session["search_results"] and parsed["size"]:
+        original_size = parsed["size"]
+
+        # First: try adjacent sizes (e.g. XXS → XS, S) before giving up on size.
+        for adjacent in _expand_size(original_size):
+            session["search_results"] = search_listings(
+                parsed["description"], size=adjacent, max_price=parsed["max_price"]
+            )
+            if session["search_results"]:
+                session["retry_note"] = (
+                    f"No results for size {original_size} — showing nearby size {adjacent} instead."
+                )
+                parsed = {**parsed, "size": adjacent}
+                break
+
+        # Second: if adjacent sizes also failed, drop size entirely.
+        if not session["search_results"]:
+            session["search_results"] = search_listings(
+                parsed["description"], size=None, max_price=parsed["max_price"]
+            )
+            if session["search_results"]:
+                session["retry_note"] = (
+                    f"No results for size {original_size} or nearby sizes — showing all sizes instead."
+                )
+                parsed = {**parsed, "size": None}
+
+    # Third: if still empty and a price ceiling was set, drop that too.
+    if not session["search_results"] and parsed["max_price"]:
+        session["search_results"] = search_listings(
+            parsed["description"], size=None, max_price=None
+        )
+        if session["search_results"]:
+            note = f"No results for size {parsed['size']}" if parsed["size"] else "No results"
+            note += f" under ${parsed['max_price']:.0f}"
+            session["retry_note"] = note + " — showing all sizes and prices instead."
+            parsed = {**parsed, "size": None, "max_price": None}
+
+    # After all retries, if still nothing: set error and stop.
     if not session["search_results"]:
         session["error"] = (
-            "Nothing matched that search. Try loosening your criteria — drop the "
-            "size filter, raise the price ceiling, or use simpler keywords."
+            "Nothing matched that search even after loosening the filters. "
+            "Try simpler keywords or a different item."
         )
         return session
 

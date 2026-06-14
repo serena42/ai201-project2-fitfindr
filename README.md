@@ -129,8 +129,14 @@ The planning loop in `run_agent()` (`agent.py`) is sequential and branches on wh
 
 **Step 2 — Search.** `search_listings()` is called with the parsed parameters. Results are stored in `session["search_results"]`.
 
-**Step 3 — Branch on results.**
-- **No results:** `session["error"]` is set to a message telling the user what to try (drop the size filter, raise the price ceiling, use simpler keywords). The function returns immediately. `suggest_outfit` and `create_fit_card` are never called. `selected_item`, `outfit_suggestion`, and `fit_card` all remain `None`.
+**Step 3 — Retry with loosened constraints (stretch feature).** If `search_listings` returns nothing, the loop retries automatically in three escalating steps before giving up:
+1. **Adjacent sizes first:** for letter sizes (XS/S/M/L/XL), try nearby sizes in order of closeness — XXS expands to XS then S, M expands to S then L, etc. This avoids suggesting an XXL for an XXS user. On success, `session["retry_note"]` explains which nearby size was used.
+2. **Drop size entirely:** if adjacent sizes also fail, retry with no size filter. On success, `session["retry_note"]` says "all sizes".
+3. **Drop price ceiling:** if still empty and a price ceiling was set, retry with no size and no price filter. On success, `session["retry_note"]` explains what was removed.
+4. **Give up:** if still nothing, `session["error"]` is set and the loop stops.
+
+The retry note is shown in the listing panel so the user knows what was adjusted, e.g.: *"No results for size XXS — showing nearby size S instead."*
+
 - **Results found:** the loop continues.
 
 **Step 4 — Select item.** `session["selected_item"]` is set to `session["search_results"][0]` — the top-ranked result.
