@@ -354,14 +354,12 @@ def create_fit_card(outfit: str, new_item: dict) -> str:
     platform = new_item.get("platform", "secondhand")
 
     prompt = (
-        f"Write a short, shareable OOTD-style caption (2-4 sentences) for a "
-        f"thrifted find, like a real Instagram post from a classy influencer — casual and "
-        f"authentic, not a product description.\n\n"
+        f"Write a 2-sentence Instagram caption for a single thrifted outfit photo — "
+        f"casual and specific, not an ad.\n\n"
         f"The find: {title}, found for {price_str} on {platform}.\n"
-        f"The outfit it's styled in:\n{outfit}\n\n"
-        f"Mention the item name, the price, and the platform naturally, once "
-        f"each. Capture the outfit's vibe in specific terms. Sound like a real "
-        f"person, not an ad. Return only the caption."
+        f"The outfit:\n{outfit}\n\n"
+        f"Mention the item name, the price, and the platform once each. "
+        f"Capture the vibe in concrete terms. Return only the caption, no hashtags."
     )
 
     # Higher temperature so captions vary across runs for the same input.
