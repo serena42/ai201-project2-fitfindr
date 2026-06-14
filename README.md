@@ -97,6 +97,26 @@ python -m pytest tests/ -m "not llm" # offline tests only
 
 ---
 
+### Stretch Tool: `get_trend_context`
+
+**File:** `tools.py`
+
+**Purpose:** Calls the Groq LLM to describe what's currently trending in fashion for a given set of style tags. The result is injected into `suggest_outfit` so trend awareness visibly influences the outfit suggestions.
+
+**Inputs:**
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `style_tags` | `list[str]` | Style descriptors from the selected listing (e.g. `["vintage", "grunge", "streetwear"]`). |
+
+**Output:** `str` — a 2–3 sentence summary of current trends relevant to those styles, covering silhouettes, color palettes, or styling directions that are having a moment.
+
+**Data source:** The LLM's training knowledge about current fashion trends, prompted with the item's specific style tags. Uses temperature 0.3 for consistent, factual output.
+
+**How it influences outfit suggestions:** The trend string is appended to the `suggest_outfit` prompt as a "Current trend context" note. The LLM incorporates it when recommending outfit combinations — e.g. if the trend context mentions oversized silhouettes and earthy tones, the outfit suggestion will lean into those directions. The trend context is also shown at the top of the outfit panel in the UI as "Trending now: ...".
+
+---
+
 ### Stretch Tool: `compare_price`
 
 **File:** `tools.py`

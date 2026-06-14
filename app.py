@@ -82,7 +82,12 @@ def handle_query(user_query: str, wardrobe_choice: str) -> tuple[str, str, str]:
         f"{retry_line}"
     )
 
-    return listing_text, session["outfit_suggestion"], session["fit_card"]
+    trend = session.get("trend_context")
+    outfit_text = session["outfit_suggestion"]
+    if trend:
+        outfit_text = f"Trending now: {trend}\n\n{outfit_text}"
+
+    return listing_text, outfit_text, session["fit_card"]
 
 
 # ── interface ─────────────────────────────────────────────────────────────────

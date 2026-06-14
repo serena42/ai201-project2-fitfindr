@@ -25,6 +25,7 @@ from tools import (
     suggest_outfit,
     create_fit_card,
     compare_price,
+    get_trend_context,
     _get_groq_client,
     _MODEL,
 )
@@ -147,6 +148,7 @@ def _new_session(query: str, wardrobe: dict) -> dict:
         "outfit_suggestion": None,   # string returned by suggest_outfit
         "fit_card": None,            # string returned by create_fit_card
         "price_comparison": None,    # dict returned by compare_price
+        "trend_context": None,       # string returned by get_trend_context
         "retry_note": None,          # set when search was retried with loosened params
         "error": None,               # set if the interaction ended early
     }
@@ -267,9 +269,16 @@ def run_agent(query: str, wardrobe: dict) -> dict:
         session["selected_item"], all_listings=_load_listings()
     )
 
+    # Fetch current trend context for the item's style tags (LLM call).
+    session["trend_context"] = get_trend_context(
+        session["selected_item"].get("style_tags", [])
+    )
+
     # Step 5: suggest an outfit pairing the selected item with the wardrobe.
+    # Pass trend context so it visibly influences the outfit suggestions.
     session["outfit_suggestion"] = suggest_outfit(
-        session["selected_item"], wardrobe
+        session["selected_item"], wardrobe,
+        trend_context=session["trend_context"],
     )
 
     # Step 6: turn the outfit into a shareable fit card.
