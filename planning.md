@@ -76,21 +76,22 @@ If outfit is empty or whitespace-only, returns a descriptive error-message strin
 
 **How does your agent decide which tool to call next?**
 1. Loop receives description, optional size, optional max_price, and wardrobe.
-2. Call search_listings(description, size, max_price).
-3. Fork on the result:
+2. Parse the query string into description, size, and max_price using an LLM call; store in session["parsed"].
+3. Call search_listings(description, size, max_price).
+4. Fork on the result:
 - If results == []: set session["error"] to a widen-your-search message, leave selected_item, outfit_suggestion, and fit_card as None, and return session.  (Why: The found item is what both downstream tools operate on; with no item there's nothing to style or caption.)
 - If results is non-empty: continue ↓
-4. Set session["selected_item"] = results[0].
-5. Call suggest_outfit(session["selected_item"], wardrobe); store in session["outfit_suggestion"].
-6. Call create_fit_card(session["outfit_suggestion"], session["selected_item"]); store in session["fit_card"].
-7. return session.
+5. Set session["selected_item"] = results[0].
+6. Call suggest_outfit(session["selected_item"], wardrobe); store in session["outfit_suggestion"].
+7. Call create_fit_card(session["outfit_suggestion"], session["selected_item"]); store in session["fit_card"].
+8. return session.
 
 ---
 
 ## State Management
 
 **How does information from one tool get passed to the next?**
-For each run there is a session dict, holding `selected_item`, `outfit_suggestion`, `fit_card`, and `error` (all starting as `None`)
+For each run there is a session dict, holding `parsed` (LLM parsed dict with description, price_max and size), `search_results` (full list), `selected_item`, `outfit_suggestion`, `fit_card`, and `error` (all starting as `None`)
 
 The output of one tool is read back out of the session dict and handed in as the argument to the next. session["selected_item"] becomes the new_item argument to suggest_outfit; session["outfit_suggestion"] becomes the outfit argument to create_fit_card
 
@@ -128,16 +129,6 @@ flowchart TD
 
 ## AI Tool Plan
 
-<!-- For each part of the implementation below, describe:
-     - Which AI tool you plan to use (Claude, Copilot, ChatGPT, etc.)
-     - What you'll give it as input (which sections of this planning.md, your agent diagram)
-     - What you expect it to produce
-     - How you'll verify the output matches your spec before moving on
-
-     "I'll use AI to help me code" is not a plan.
-     "I'll give Claude my Tool 1 spec (inputs, return value, failure mode) and ask it to implement
-     search_listings() using load_listings() from the data loader — then test it against 3 queries
-     before trusting it" is a plan. -->
 
 **Milestone 3 — Individual tool implementations:**
 For each of the three tools I will use Claude Code, giving it the function signature from tools.py, the corresponding tool spec block from planning.md (inputs, return value, failure mode), and the instruction to use load_listings() from utils/data_loader.py rather than reimplementing file loading. Before running the generated code I will check that it filters by all three parameters, handles None values for size and max_price by skipping those filters, scores by keyword overlap against title/description/style_tags/colors, drops zero-score items, and returns [] on no match rather than None or raising. I will then run it against three queries: one that should return results, one with a price ceiling that excludes everything, and one impossible combination (e.g. designer ballgown, XXS, $5) that must return [] without crashing. 
