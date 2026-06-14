@@ -68,7 +68,36 @@ If outfit is empty or whitespace-only, returns a descriptive error-message strin
 
 ### Additional Tools (if any)
 
-<!-- Copy the block above for any tools beyond the required three -->
+### Stretch Tool: compare_price
+
+**What it does:**
+Compares a listing's price against all other items of the same category in the dataset and returns a price assessment with reasoning. Runs entirely offline — no LLM call.
+
+**Input parameters:**
+- `item` (dict, required): the listing dict being assessed.
+- `all_listings` (list[dict], optional, default `None`): pre-loaded listings to compare against; loads from file if `None`.
+
+**What it returns:**
+A dict with keys: `verdict` (str: "great deal" / "fair price" / "above average" / "no comparables"), `item_price` (float), `median_price` (float | None), `comparable_count` (int), `reasoning` (str: one sentence explaining the verdict with the median and dollar difference).
+
+**What happens if it fails or returns nothing:**
+If no other listings share the same category, returns `{"verdict": "no comparables", "median_price": None, "comparable_count": 0, ...}` — never raises.
+
+---
+
+### Stretch Tool: get_trend_context
+
+**What it does:**
+Calls the Groq LLM to describe what's currently trending in fashion for a given set of style tags. The result is injected into `suggest_outfit` so trend awareness visibly influences the outfit suggestions.
+
+**Input parameters:**
+- `style_tags` (list[str], required): style descriptors from the selected listing (e.g. `["vintage", "grunge", "streetwear"]`).
+
+**What it returns:**
+A str — one sentence naming the most relevant current fashion trend for the given style tags. Uses temperature 0.3 for consistent output.
+
+**What happens if it fails or returns nothing:**
+Any LLM or network error returns an empty string. The planning loop checks for a non-empty trend_context before injecting it into the outfit prompt — an empty string is silently skipped.
 
 ---
 

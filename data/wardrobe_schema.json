@@ -95,6 +95,54 @@
         "colors": ["black"],
         "style_tags": ["minimal", "accessories", "everyday"],
         "notes": null
+      },
+      {
+        "id": "w_011",
+        "name": "Navy rugby shirt",
+        "category": "tops",
+        "colors": ["navy", "cream"],
+        "style_tags": ["preppy", "campus", "sporty", "classic"],
+        "notes": "Relaxed fit, slightly boxy"
+      },
+      {
+        "id": "w_012",
+        "name": "Pleated tennis skirt, white",
+        "category": "bottoms",
+        "colors": ["white"],
+        "style_tags": ["preppy", "sporty", "feminine", "classic"],
+        "notes": "High-waisted and easy to layer with sweaters"
+      },
+      {
+        "id": "w_013",
+        "name": "Black satin cami",
+        "category": "tops",
+        "colors": ["black"],
+        "style_tags": ["indie sleaze", "y2k", "going-out", "fitted"],
+        "notes": "Bias cut, slightly drapey"
+      },
+      {
+        "id": "w_014",
+        "name": "Charcoal tailored blazer",
+        "category": "outerwear",
+        "colors": ["charcoal", "grey"],
+        "style_tags": ["minimal", "preppy", "workwear", "classic"],
+        "notes": "Structured shoulders, can be layered over tees"
+      },
+      {
+        "id": "w_015",
+        "name": "White leather loafers",
+        "category": "shoes",
+        "colors": ["white"],
+        "style_tags": ["preppy", "classic", "modern basics", "polished"],
+        "notes": null
+      },
+      {
+        "id": "w_016",
+        "name": "Chunky silver hoop earrings",
+        "category": "accessories",
+        "colors": ["silver"],
+        "style_tags": ["indie sleaze", "y2k", "going-out", "accessories"],
+        "notes": null
       }
     ]
   },

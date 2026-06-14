@@ -42,7 +42,7 @@ def load_wardrobe_schema() -> dict:
     Returns:
         A dictionary containing:
         - schema: the field definitions for a wardrobe item
-        - example_wardrobe: a sample wardrobe with 10 items
+        - example_wardrobe: a sample wardrobe with varied items
         - empty_wardrobe: a starting template for a new user
     """
     path = os.path.join(_DATA_DIR, "wardrobe_schema.json")

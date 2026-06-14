@@ -273,7 +273,7 @@ def suggest_outfit(new_item: dict, wardrobe: dict, style_context: str | None = N
         prompt = (
             f"Styling advice for this secondhand piece: {item_desc}\n\n"
             f"Give 1-2 brief outfit directions — what to pair it with and what "
-            f"vibe it suits. No item description recap, no filler. Elevated-casual "
+            f"vibe it suits. No item description recap, no filler. Elevated "
             f"voice, 2-3 sentences max."
             f"{context_lines}"
         )
@@ -297,7 +297,7 @@ def suggest_outfit(new_item: dict, wardrobe: dict, style_context: str | None = N
             f"Their closet:\n{wardrobe_text}\n\n"
             f"Suggest 1-2 outfits pairing the new piece with named items from "
             f"the closet. No recap of the item, no filler. Just the outfit combos "
-            f"in an elevated-casual voice, 3-4 sentences max. Only use pieces "
+            f"in an elevated voice, 3-4 sentences max. Only use pieces "
             f"from the list above."
             f"{context_lines}"
         )
@@ -355,9 +355,9 @@ def create_fit_card(outfit: str, new_item: dict) -> str:
 
     prompt = (
         f"Write a short, shareable OOTD-style caption (2-4 sentences) for a "
-        f"thrifted find, like a real Instagram or TikTok post — casual and "
+        f"thrifted find, like a real Instagram post from a classy influencer — casual and "
         f"authentic, not a product description.\n\n"
-        f"The find: {title}, scored for {price_str} on {platform}.\n"
+        f"The find: {title}, found for {price_str} on {platform}.\n"
         f"The outfit it's styled in:\n{outfit}\n\n"
         f"Mention the item name, the price, and the platform naturally, once "
         f"each. Capture the outfit's vibe in specific terms. Sound like a real "
