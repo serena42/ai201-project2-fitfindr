@@ -98,7 +98,9 @@ def _parse_query(query: str) -> dict:
         'drop size/price/wardrobe chatter>",\n'
         '  "size": "<the size as a code if stated — S, M, L, XL, or a number '
         "like '8'; map words such as 'small'->'S', 'large'->'L'; else null>\",\n"
-        '  "max_price": <the price ceiling as a number if stated; else null>\n'
+        '  "max_price": <the price ceiling as a number if stated; else null>,\n'
+        '  "category": "<one of: tops, bottoms, outerwear, shoes, accessories — '
+        "infer from the item type; null if unclear>\"\n"
         "}"
     )
 
@@ -124,7 +126,11 @@ def _parse_query(query: str) -> dict:
         except (TypeError, ValueError):
             max_price = None
 
-    return {"description": description, "size": size, "max_price": max_price}
+    valid_categories = {"tops", "bottoms", "outerwear", "shoes", "accessories"}
+    raw_cat = (parsed.get("category") or "").strip().lower()
+    category = raw_cat if raw_cat in valid_categories else None
+
+    return {"description": description, "size": size, "max_price": max_price, "category": category}
 
 
 # ── session state ─────────────────────────────────────────────────────────────
@@ -213,16 +219,19 @@ def run_agent(query: str, wardrobe: dict) -> dict:
         parsed["description"],
         size=parsed["size"],
         max_price=parsed["max_price"],
+        category=parsed.get("category"),
     )
 
     # If nothing matched, retry with progressively loosened size constraints.
     if not session["search_results"] and parsed["size"]:
         original_size = parsed["size"]
 
+        cat = parsed.get("category")
+
         # First: try adjacent sizes (e.g. XXS → XS, S) before giving up on size.
         for adjacent in _expand_size(original_size):
             session["search_results"] = search_listings(
-                parsed["description"], size=adjacent, max_price=parsed["max_price"]
+                parsed["description"], size=adjacent, max_price=parsed["max_price"], category=cat
             )
             if session["search_results"]:
                 session["retry_note"] = (
@@ -234,7 +243,7 @@ def run_agent(query: str, wardrobe: dict) -> dict:
         # Second: if adjacent sizes also failed, drop size entirely.
         if not session["search_results"]:
             session["search_results"] = search_listings(
-                parsed["description"], size=None, max_price=parsed["max_price"]
+                parsed["description"], size=None, max_price=parsed["max_price"], category=cat
             )
             if session["search_results"]:
                 session["retry_note"] = (
@@ -245,7 +254,7 @@ def run_agent(query: str, wardrobe: dict) -> dict:
     # Third: if still empty and a price ceiling was set, drop that too.
     if not session["search_results"] and parsed["max_price"]:
         session["search_results"] = search_listings(
-            parsed["description"], size=None, max_price=None
+            parsed["description"], size=None, max_price=None, category=parsed.get("category")
         )
         if session["search_results"]:
             note = f"No results for size {parsed['size']}" if parsed["size"] else "No results"

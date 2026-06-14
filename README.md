@@ -61,6 +61,10 @@ python -m pytest tests/ -m "not llm" # offline tests only
 
 **Scoring:** title and style_tags (+3 each per matching token), colors (+2), description (+1). Zero-score items are dropped.
 
+**Size matching:** uses word-boundary matching (`\b8\b`) so `"8"` matches `"US 8"` but not `"W28"`. This prevents shoe sizes from matching waist sizes and vice versa.
+
+**Category filtering:** when a `category` is provided, only listings with that exact category are considered before scoring. The planning loop extracts category from the query (e.g. `"boots"` → `shoes`) so cross-category results are excluded at search time.
+
 ---
 
 ### Tool 2: `suggest_outfit`
@@ -145,7 +149,7 @@ Price check ✅ GREAT DEAL: At $19, this is $2 below the median of $21 for tops 
 
 The planning loop in `run_agent()` (`agent.py`) is sequential and branches on whether `search_listings` finds anything. Here's exactly what it does:
 
-**Step 1 — Parse the query.** `_parse_query()` sends the user's free-text query to the LLM with a JSON-mode prompt, asking it to extract `description`, `size`, and `max_price`. The extracted `size` is passed through `_normalize_size()`, which maps spelled-out words (`"small"` → `"S"`, `"large"` → `"L"`) to the letter codes the dataset uses. If the LLM response can't be parsed, the raw query is used as the description with no size/price filters — parsing can never crash the loop. The result is stored in `session["parsed"]`.
+**Step 1 — Parse the query.** `_parse_query()` sends the user's free-text query to the LLM with a JSON-mode prompt, asking it to extract `description`, `size`, `max_price`, and `category`. The extracted `size` is passed through `_normalize_size()`, which maps spelled-out words (`"small"` → `"S"`, `"large"` → `"L"`) to the letter codes the dataset uses. `category` is validated against the five dataset values (`tops`, `bottoms`, `outerwear`, `shoes`, `accessories`) and set to `None` if the LLM returns anything outside that set. If the LLM response can't be parsed at all, the raw query is used as the description with all filters as `None` — parsing can never crash the loop. The result is stored in `session["parsed"]`.
 
 **Step 2 — Search.** `search_listings()` is called with the parsed parameters. Results are stored in `session["search_results"]`.
 

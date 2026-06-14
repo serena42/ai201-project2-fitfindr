@@ -48,6 +48,7 @@ def search_listings(
     description: str,
     size: str | None = None,
     max_price: float | None = None,
+    category: str | None = None,
 ) -> list[dict]:
     """
     Search the mock listings dataset for items matching the description,
@@ -83,13 +84,21 @@ def search_listings(
 
     scored: list[tuple[int, dict]] = []
     for listing in listings:
+        # Category filter: exact match against dataset category field.
+        if category is not None and listing.get("category", "").lower() != category.lower():
+            continue
+
         # Price filter (inclusive). Skip if a ceiling is set and exceeded.
         if max_price is not None and listing["price"] > max_price:
             continue
 
-        # Size filter: case-insensitive substring match ("M" matches "S/M").
+        # Size filter: whole-token match so "8" matches "US 8" but not "W28".
         if size is not None and size.strip():
-            if size.strip().lower() not in listing["size"].lower():
+            if not re.search(
+                r"\b" + re.escape(size.strip()) + r"\b",
+                listing["size"],
+                re.IGNORECASE,
+            ):
                 continue
 
         # Score by keyword overlap against title, description, style_tags, colors.
