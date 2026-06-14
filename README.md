@@ -163,7 +163,7 @@ The retry note is shown in the listing panel so the user knows what was adjusted
 
 - **Results found:** the loop continues.
 
-**Step 4 — Select item.** `session["selected_item"]` is set to `session["search_results"][0]` — the top-ranked result.
+**Step 4 — Select item.** `session["selected_item"]` is set to `session["search_results"][0]` — the top-ranked result. The loop then checks for a color mismatch: if the query contained a recognized color word (e.g. "black") that doesn't appear in the selected item's colors field, `session["match_note"]` is set to a warning like *"Closest match — no black shoes found with your filters."* This is shown in the listing panel so the user knows the result is a partial match, without blocking the interaction.
 
 **Step 5 — Suggest outfit.** `suggest_outfit(session["selected_item"], wardrobe)` is called. Result stored in `session["outfit_suggestion"]`.
 
@@ -181,14 +181,18 @@ All state for a single interaction lives in the session dict initialized by `_ne
 
 ```python
 {
-    "query": str,             # original user query
-    "parsed": dict,           # extracted description / size / max_price
-    "search_results": list,   # full list of matching listing dicts
-    "selected_item": dict,    # top result (results[0]), or None
-    "wardrobe": dict,         # user's wardrobe, passed in unchanged
-    "outfit_suggestion": str, # returned by suggest_outfit, or None
-    "fit_card": str,          # returned by create_fit_card, or None
-    "error": str,             # set if the interaction ended early, else None
+    "query": str,              # original user query
+    "parsed": dict,            # extracted description / size / max_price / category
+    "search_results": list,    # full list of matching listing dicts
+    "selected_item": dict,     # top result (results[0]), or None
+    "wardrobe": dict,          # user's wardrobe, passed in unchanged
+    "outfit_suggestion": str,  # returned by suggest_outfit, or None
+    "fit_card": str,           # returned by create_fit_card, or None
+    "price_comparison": dict,  # returned by compare_price, or None
+    "trend_context": str,      # returned by get_trend_context, or None
+    "retry_note": str,         # set when search was retried with loosened params
+    "match_note": str,         # set when the top result doesn't match a queried color
+    "error": str,              # set if the interaction ended early, else None
 }
 ```
 
@@ -206,7 +210,8 @@ No data is re-derived between steps and no values are hardcoded. If state isn't 
 
 | Tool | Failure mode | What the agent does |
 |------|-------------|-------------------|
-| `search_listings` | No listings match the query | Returns `[]`. The planning loop sets `session["error"]` to a message naming the failure and suggesting three recovery actions (drop the size filter, raise the price ceiling, use simpler keywords), then returns the session early without calling the downstream tools. |
+| `search_listings` | No listings match the query | Returns `[]`. The loop retries with adjacent sizes, then drops size, then drops price ceiling before giving up. If all retries fail, `session["error"]` is set and the loop stops without calling downstream tools. |
+| `search_listings` | Result doesn't match a queried color | The loop sets `session["match_note"]` with a warning (e.g. *"Closest match — no black shoes found with your filters."*) shown in the listing panel. The interaction continues — the agent doesn't block on a partial color match. |
 | `suggest_outfit` | Wardrobe is empty | The tool detects `wardrobe["items"] == []` and switches to a general-styling prompt that doesn't reference named wardrobe pieces. The LLM returns general advice about what pairs well with the item. No exception, no empty string. |
 | `create_fit_card` | Outfit string is empty or whitespace | The tool guards at the top: `if not outfit or not outfit.strip()` returns a descriptive error string (`"Can't create a fit card — no outfit was provided. Generate an outfit suggestion first, then try again."`). The LLM is never called. |
 

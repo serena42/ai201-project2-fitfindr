@@ -59,6 +59,12 @@ def _normalize_size(size: str | None) -> str | None:
 # Adjacent sizes to try when the exact size returns no results, ordered by
 # closeness. Only letter sizes are expanded — numeric sizes (shoe/waist) are
 # left to the caller to decide whether to drop entirely.
+_COLORS = {
+    "black", "white", "grey", "gray", "blue", "navy", "red", "pink",
+    "green", "olive", "brown", "tan", "beige", "cream", "yellow",
+    "orange", "purple", "burgundy", "denim", "khaki", "gold", "silver",
+}
+
 _ADJACENT_SIZES: dict[str, list[str]] = {
     "XXS": ["XS", "S"],
     "XS":  ["S", "XXS"],
@@ -156,6 +162,7 @@ def _new_session(query: str, wardrobe: dict) -> dict:
         "price_comparison": None,    # dict returned by compare_price
         "trend_context": None,       # string returned by get_trend_context
         "retry_note": None,          # set when search was retried with loosened params
+        "match_note": None,          # set when the top result is a partial match
         "error": None,               # set if the interaction ended early
     }
 
@@ -272,6 +279,18 @@ def run_agent(query: str, wardrobe: dict) -> dict:
 
     # Step 4: select the top (most relevant) result to build around.
     session["selected_item"] = session["search_results"][0]
+
+    # Check for color mismatch between the query and the selected item.
+    from tools import _tokenize as _tok
+    queried_colors = _COLORS & set(_tok(parsed["description"]))
+    item_colors = set(_tok(" ".join(session["selected_item"].get("colors", []))))
+    missing = queried_colors - item_colors
+    if missing:
+        missing_str = " and ".join(sorted(missing))
+        category = session["selected_item"].get("category", "item")
+        session["match_note"] = (
+            f"Closest match — no {missing_str} {category} found with your filters."
+        )
 
     # Compare the selected item's price against the full dataset (offline).
     session["price_comparison"] = compare_price(

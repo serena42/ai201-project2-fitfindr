@@ -72,6 +72,10 @@ def handle_query(user_query: str, wardrobe_choice: str) -> tuple[str, str, str]:
     if session.get("retry_note"):
         retry_line = f"\nNote: {session['retry_note']}"
 
+    match_line = ""
+    if session.get("match_note"):
+        match_line = f"\n⚠️ {session['match_note']}"
+
     listing_text = (
         f"{item['title']}\n"
         f"${item['price']:.0f} · {item['platform']}\n"
@@ -80,6 +84,7 @@ def handle_query(user_query: str, wardrobe_choice: str) -> tuple[str, str, str]:
         f"{item['description']}"
         f"{price_line}"
         f"{retry_line}"
+        f"{match_line}"
     )
 
     trend = session.get("trend_context")
