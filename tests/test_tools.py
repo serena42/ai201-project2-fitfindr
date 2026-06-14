@@ -59,7 +59,7 @@ def test_suggest_outfit_with_wardrobe():
     item = search_listings("vintage graphic tee", size=None, max_price=50)[0]
     result = suggest_outfit(item, get_example_wardrobe())
     assert isinstance(result, str)
-    assert len(result.strip()) > 0
+    assert len(result.strip()) > 10
 
 
 @pytest.mark.llm
