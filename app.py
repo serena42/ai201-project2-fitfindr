@@ -66,7 +66,7 @@ def handle_query(user_query: str, wardrobe_choice: str) -> tuple[str, str, str]:
     price_line = ""
     if pc.get("verdict") and pc["verdict"] != "no comparables":
         verdict_emoji = {"great deal": "✅", "fair price": "➡️", "above average": "⚠️"}.get(pc["verdict"], "")
-        price_line = f"\nPrice check {verdict_emoji} {pc['verdict'].upper()}: {pc['reasoning']}"
+        price_line = f"\n\nPrice check {verdict_emoji} {pc['verdict'].upper()}: {pc['reasoning']}"
 
     retry_line = ""
     if session.get("retry_note"):
