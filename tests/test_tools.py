@@ -90,6 +90,7 @@ def test_suggest_outfit_with_wardrobe():
     result = suggest_outfit(item, get_example_wardrobe())
     assert isinstance(result, str)
     assert len(result.strip()) > 10
+    assert len(result) < 500  # Should be brief, not a full essay.
 
 
 @pytest.mark.llm
@@ -98,7 +99,8 @@ def test_suggest_outfit_empty_wardrobe():
     item = search_listings("vintage graphic tee", size=None, max_price=50)[0]
     result = suggest_outfit(item, get_empty_wardrobe())
     assert isinstance(result, str)
-    assert len(result.strip()) > 0
+    assert len(result.strip()) > 10
+    assert len(result) < 500  # Should be brief, not a full essay.
 
 
 # ── Tool 3: create_fit_card ─────────────────────────────────────────────────
