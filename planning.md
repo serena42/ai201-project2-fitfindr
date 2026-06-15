@@ -104,25 +104,44 @@ Any LLM or network error returns an empty string. The planning loop checks for a
 ## Planning Loop
 
 **How does your agent decide which tool to call next?**
-1. Loop receives description, optional size, optional max_price, and wardrobe.
-2. Parse the query string into description, size, and max_price using an LLM call; store in session["parsed"].
-3. Call search_listings(description, size, max_price).
+1. Loop receives a natural-language query and a wardrobe dict.
+2. Parse the query into description, size, max_price, and category using an LLM JSON-mode call; store in session["parsed"]. Size words ("small") are normalized to dataset codes ("S").
+3. Call search_listings(description, size, max_price, category).
 4. Fork on the result:
-- If results == []: set session["error"] to a widen-your-search message, leave selected_item, outfit_suggestion, and fit_card as None, and return session.  (Why: The found item is what both downstream tools operate on; with no item there's nothing to style or caption.)
-- If results is non-empty: continue ↓
-5. Set session["selected_item"] = results[0].
-6. Call suggest_outfit(session["selected_item"], wardrobe); store in session["outfit_suggestion"].
-7. Call create_fit_card(session["outfit_suggestion"], session["selected_item"]); store in session["fit_card"].
-8. return session.
+   - If results == []: retry with progressively loosened constraints —
+     a. Try adjacent letter sizes (XXS → XS → S) before dropping size entirely; set session["retry_note"] on success.
+     b. If still empty, drop size filter entirely.
+     c. If still empty and a price ceiling was set, drop price filter too.
+     d. If still empty after all retries: set session["error"], leave downstream fields None, return session. (Why: downstream tools require a found item.)
+   - If results is non-empty: continue ↓
+5. Set session["selected_item"] = results[0]. Check for color mismatch between the queried color words and the item's colors field; set session["match_note"] if a queried color is absent.
+6. Call compare_price(session["selected_item"]); store in session["price_comparison"]. (Offline — no LLM call.)
+7. Call get_trend_context(session["selected_item"]["style_tags"]); store in session["trend_context"].
+8. Call suggest_outfit(session["selected_item"], wardrobe, trend_context=session["trend_context"]); store in session["outfit_suggestion"].
+9. Call create_fit_card(session["outfit_suggestion"], session["selected_item"]); store in session["fit_card"].
+10. return session.
 
 ---
 
 ## State Management
 
 **How does information from one tool get passed to the next?**
-For each run there is a session dict, holding `parsed` (LLM parsed dict with description, price_max and size), `search_results` (full list), `selected_item`, `outfit_suggestion`, `fit_card`, and `error` (all starting as `None`)
+For each run there is a session dict with these fields (all start as None unless noted):
 
-The output of one tool is read back out of the session dict and handed in as the argument to the next. session["selected_item"] becomes the new_item argument to suggest_outfit; session["outfit_suggestion"] becomes the outfit argument to create_fit_card
+- `query` (str): original user query
+- `parsed` (dict): extracted description, size, max_price, category from LLM parse
+- `search_results` (list): full ranked list from search_listings
+- `selected_item` (dict): results[0] — passed as new_item to suggest_outfit and create_fit_card
+- `wardrobe` (dict): passed in unchanged, forwarded to suggest_outfit
+- `outfit_suggestion` (str): returned by suggest_outfit — passed as outfit to create_fit_card
+- `fit_card` (str): returned by create_fit_card
+- `price_comparison` (dict): returned by compare_price — displayed in the listing panel
+- `trend_context` (str): returned by get_trend_context — injected into the suggest_outfit prompt
+- `retry_note` (str): set when search was retried with loosened parameters
+- `match_note` (str): set when the top result doesn't match a queried color
+- `error` (str): set if the interaction ended early; downstream fields stay None
+
+Each tool writes its result into the session dict immediately after returning. The next tool reads from the session dict rather than receiving a local variable — this makes state visible and inspectable at every step.
 
 ---
 
@@ -132,9 +151,11 @@ For each tool, describe the specific failure mode you're handling and what the a
 
 | Tool | Failure mode | Agent response |
 |------|-------------|----------------|
-| search_listings | No results match the query | tells the user nothing matched and to loosen criteria (drop the size filter, raise the price, simpler keywords), and stops |
-| suggest_outfit | Wardrobe is empty | the tool returns general styling guidance for the piece instead of named-wardrobe pairings |
-| create_fit_card | Outfit input is missing or incomplete |Returns a short error message (unlikely since the suggest outfit tool guarantees non-empty string return) |
+| search_listings | No results match the query | Retries automatically: adjacent sizes first, then drop size, then drop price ceiling. If all retries fail, sets session["error"] with specific recovery suggestions and stops — downstream tools are never called. |
+| suggest_outfit | Wardrobe is empty | Tool detects empty wardrobe["items"] and switches to a general-styling prompt that doesn't reference named wardrobe pieces. Always returns a non-empty string — never raises. |
+| create_fit_card | Outfit string is empty or whitespace | Guards at entry: returns a descriptive error string without calling the LLM. Unlikely in practice since suggest_outfit guarantees a non-empty return. |
+| compare_price | No other listings share the same category | Returns {"verdict": "no comparables", ...} — the UI omits the price check line rather than showing a meaningless result. Never raises. |
+| get_trend_context | LLM call fails or returns empty | Returns an empty string. The planning loop checks before injecting into the outfit prompt — empty trend context is silently skipped. |
 
 ---
 
@@ -142,15 +163,22 @@ For each tool, describe the specific failure mode you're handling and what the a
 
 ```mermaid
 flowchart TD
-    User[User query: description, size, max_price] --> Loop[Planning Loop]
-    Loop --> Search[search_listings]
-    Search -->|returns empty list| Err[Set session error, return]
-    Search -->|returns non-empty list| Store1[session selected_item = results 0]
-    Store1 -->|new_item = session selected_item| Suggest[suggest_outfit new_item, wardrobe]
-    Suggest --> Store2[session outfit_suggestion]
-    Store2 -->|outfit = session outfit_suggestion| Card[create_fit_card outfit, new_item]
-    Card --> Store3[session fit_card]
-    Store3 --> Return[return session]
+    User[User query] --> Parse[_parse_query — LLM JSON mode]
+    Parse --> Search[search_listings description, size, max_price, category]
+    Search -->|empty| Retry[Retry: adjacent sizes → drop size → drop price]
+    Retry -->|still empty| Err[Set session error, return]
+    Retry -->|found| Store1[session selected_item = results 0]
+    Search -->|non-empty| Store1
+    Store1 --> ColorCheck[Color mismatch check → session match_note]
+    ColorCheck --> Price[compare_price — offline]
+    Price --> Store2[session price_comparison]
+    Store2 --> Trend[get_trend_context style_tags — LLM]
+    Trend --> Store3[session trend_context]
+    Store3 -->|new_item + wardrobe + trend_context| Suggest[suggest_outfit]
+    Suggest --> Store4[session outfit_suggestion]
+    Store4 -->|outfit + new_item| Card[create_fit_card]
+    Card --> Store5[session fit_card]
+    Store5 --> Return[return session]
     Err --> Return
 ```
 
@@ -166,6 +194,13 @@ Once I believe the implementation is complete I will use Copilot as a second opi
 
 **Milestone 4 — Planning loop and state management:**
 I will give Claude Code the Architecture diagram from planning.md and the Planning Loop + State Management sections, and ask it to implement run_agent() in agent.py. Before running I will verify the generated code branches on the search result (not just calls all three tools unconditionally), stores each tool's output in the session dict immediately after it returns, and passes session["selected_item"] as new_item and session["outfit_suggestion"] as outfit rather than using any hardcoded values. I will then run the no-results test case and confirm session["fit_card"] stays None and session["error"] is set.
+
+**Stretch features — compare_price, retry logic, get_trend_context:**
+For compare_price I gave Claude Code the tool spec (inputs, verdict thresholds, no-comparables fallback) and verified the median was computed from same-category items only, excluding the item itself, and that the "great deal" / "fair price" / "above average" thresholds matched the spec (−20% / +15%). I confirmed the result was stored in session["price_comparison"] and displayed in the listing panel with a verdict emoji.
+
+For retry logic I described the desired behavior — try adjacent letter sizes before dropping size entirely, so an XXS user is never shown an XXL result — and asked Claude Code to implement it as an ordered expansion dict (_ADJACENT_SIZES). I verified XXS expands to ["XS", "S"] not ["S", "XS"], and that numeric sizes (shoe sizes, waist sizes) return [] and fall through to dropping size entirely.
+
+For get_trend_context I gave Claude Code the tool spec and asked it to inject the result into the suggest_outfit prompt as a "Current trend context" note. I verified the trend string was stored in session["trend_context"], prepended to the outfit panel in the UI as "Trending now: ...", and that an empty trend_context was silently skipped rather than appended as blank text.
 
 ---
 
