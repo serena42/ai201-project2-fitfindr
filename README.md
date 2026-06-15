@@ -54,8 +54,9 @@ python -m pytest tests/ -m "not llm" # offline tests only
 | Parameter | Type | Description |
 |-----------|------|-------------|
 | `description` | `str` | Keywords describing what the user wants (e.g. `"vintage graphic tee"`). Matched against title, description, style_tags, and colors via weighted keyword overlap. |
-| `size` | `str \| None` | Size filter — case-insensitive substring match (`"M"` matches `"S/M"`). `None` skips size filtering. |
+| `size` | `str \| None` | Size filter — word-boundary match (`"M"` matches `"S/M"` but not `"XM"`). `None` skips size filtering. |
 | `max_price` | `float \| None` | Inclusive price ceiling. `None` skips price filtering. |
+| `category` | `str \| None` | Restricts results to one of: `tops`, `bottoms`, `outerwear`, `shoes`, `accessories`. Applied before scoring so cross-category items are excluded entirely. `None` skips category filtering. |
 
 **Output:** `list[dict]` — matching listing dicts, sorted highest-relevance first. Each dict has: `id`, `title`, `description`, `category`, `style_tags`, `size`, `condition`, `price`, `colors`, `brand`, `platform`. Returns `[]` on no match — never raises.
 
@@ -97,7 +98,7 @@ python -m pytest tests/ -m "not llm" # offline tests only
 | `outfit` | `str` | The outfit suggestion string returned by `suggest_outfit`. |
 | `new_item` | `dict` | The listing dict for the thrifted item — used to pull title, price, and platform for the caption. |
 
-**Output:** `str` — a 2–4 sentence caption mentioning the item name, price, and platform once each, capturing the outfit's vibe. Uses temperature 1.0 so output varies across runs. If `outfit` is empty or whitespace, returns a descriptive error message string — never raises.
+**Output:** `str` — a 2-sentence caption mentioning the item name, price, and platform once each, capturing the outfit's vibe. Uses temperature 1.0 so output varies across runs. If `outfit` is empty or whitespace, returns a descriptive error message string — never raises.
 
 ---
 
@@ -165,11 +166,15 @@ The retry note is shown in the listing panel so the user knows what was adjusted
 
 **Step 4 — Select item.** `session["selected_item"]` is set to `session["search_results"][0]` — the top-ranked result. The loop then checks for a color mismatch: if the query contained a recognized color word (e.g. "black") that doesn't appear in the selected item's colors field, `session["match_note"]` is set to a warning like *"Closest match — no black shoes found with your filters."* This is shown in the listing panel so the user knows the result is a partial match, without blocking the interaction.
 
-**Step 5 — Suggest outfit.** `suggest_outfit(session["selected_item"], wardrobe)` is called. Result stored in `session["outfit_suggestion"]`.
+**Step 5 — Compare price (stretch feature).** `compare_price(session["selected_item"])` is called offline. It computes the median price of all same-category listings and returns a verdict ("great deal" / "fair price" / "above average") with a one-sentence reasoning string. Result stored in `session["price_comparison"]` and shown in the listing panel with a verdict emoji.
 
-**Step 6 — Create fit card.** `create_fit_card(session["outfit_suggestion"], session["selected_item"])` is called. Result stored in `session["fit_card"]`.
+**Step 6 — Get trend context (stretch feature).** `get_trend_context(session["selected_item"]["style_tags"])` calls the LLM to name the most relevant current fashion trend for the item's style tags. Result stored in `session["trend_context"]` and shown at the top of the outfit panel as "Trending now: ...".
 
-**Step 7 — Return.** The completed session dict is returned.
+**Step 7 — Suggest outfit.** `suggest_outfit(session["selected_item"], wardrobe, trend_context=session["trend_context"])` is called. The trend context is appended to the prompt so it visibly influences the outfit recommendations. Result stored in `session["outfit_suggestion"]`.
+
+**Step 8 — Create fit card.** `create_fit_card(session["outfit_suggestion"], session["selected_item"])` is called. Result stored in `session["fit_card"]`.
+
+**Step 9 — Return.** The completed session dict is returned.
 
 The key design decision: the loop only calls the downstream tools when there is an item to work with. Calling `suggest_outfit` with no item would require inventing data; the agent stops early instead and gives the user actionable recovery guidance.
 
@@ -214,6 +219,8 @@ No data is re-derived between steps and no values are hardcoded. If state isn't 
 | `search_listings` | Result doesn't match a queried color | The loop sets `session["match_note"]` with a warning (e.g. *"Closest match — no black shoes found with your filters."*) shown in the listing panel. The interaction continues — the agent doesn't block on a partial color match. |
 | `suggest_outfit` | Wardrobe is empty | The tool detects `wardrobe["items"] == []` and switches to a general-styling prompt that doesn't reference named wardrobe pieces. The LLM returns general advice about what pairs well with the item. No exception, no empty string. |
 | `create_fit_card` | Outfit string is empty or whitespace | The tool guards at the top: `if not outfit or not outfit.strip()` returns a descriptive error string (`"Can't create a fit card — no outfit was provided. Generate an outfit suggestion first, then try again."`). The LLM is never called. |
+| `compare_price` | No other listings share the same category | Returns `{"verdict": "no comparables", "median_price": None, "comparable_count": 0, ...}`. The UI omits the price check line rather than showing a meaningless result. Never raises. |
+| `get_trend_context` | LLM call fails or returns empty | Returns an empty string. The planning loop checks before injecting into the outfit prompt — empty trend context is silently skipped, and the "Trending now:" prefix is omitted from the UI. |
 
 ### Triggered examples
 
